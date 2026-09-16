@@ -55,18 +55,14 @@ app.secret_key = os.environ.get(
 )
 
 # Upload configuration
-UPLOAD_FOLDER = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'uploads')
 ALLOWED_EXTENSIONS = {'pdf', 'docx'}
 MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB max upload size
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 # Database path
-DATABASE = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'users.db')
-
-# Ensure uploads folder exists locally
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Vercel's deployment filesystem is read-only, so use /tmp for SQLite.
+DATABASE = os.path.join('/tmp', 'users.db')
 
 
 def get_db():
