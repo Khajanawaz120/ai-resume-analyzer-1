@@ -1,0 +1,6 @@
+{
+  "name": "AI Resume Analyzer",
+  "description": "A secure AI Resume Analyzer web application with user authentication, SQLite database, PDF and DOCX resume parsing, skill extraction, and career recommendations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

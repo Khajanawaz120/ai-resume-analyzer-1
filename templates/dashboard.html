@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - AI Resume Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="dashboard-page">
+    <!-- Navigation Bar -->
+    <header class="navbar" id="app-navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">
+                <div class="brand-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </div>
+                <span class="brand-name">AI Resume Analyzer</span>
+            </div>
+
+            <div class="navbar-user">
+                <div class="user-badge" id="user-badge">
+                    <div class="user-avatar">{{ user_name[0] if user_name else 'U' }}</div>
+                    <div class="user-info">
+                        <span class="user-name">{{ user_name }}</span>
+                        <span class="user-email">{{ user_email }}</span>
+                    </div>
+                </div>
+
+                <div class="privacy-badge" title="Your uploaded resumes and session are confidential">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span>Private Session</span>
+                </div>
+
+                <a href="{{ url_for('logout') }}" class="btn-logout" id="btn-logout" title="Log out to protect your privacy and clear your session">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    <span>Log Out</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="dashboard-main">
+        <div class="container">
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-container mb-6" id="dashboard-flash-messages">
+                        {% for category, message in messages %}
+                            <div class="flash-alert flash-{{ category }}">
+                                <span class="flash-icon">
+                                    {% if category == 'success' %}
+                                        ✓
+                                    {% else %}
+                                        ⚠
+                                    {% endif %}
+                                </span>
+                                <span class="flash-text">{{ message }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <!-- Privacy & Session Protection Notice -->
+            <div class="privacy-banner" id="session-privacy-notice">
+                <div class="privacy-banner-text">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span><strong>Session Privacy:</strong> Use the <strong>Log Out</strong> option in the top right whenever you are finished to wipe all cached data and keep your resume files confidential.</span>
+                </div>
+                <a href="{{ url_for('logout') }}" class="privacy-banner-link">Log Out Now</a>
+            </div>
+
+            <!-- Upload Card Section -->
+            <section class="upload-section">
+                <div class="card upload-card" id="resume-upload-card">
+                    <div class="upload-header">
+                        <h2>Upload Resume for AI Evaluation</h2>
+                        <p>Upload your latest CV or resume in PDF or DOCX format to receive in-depth skill parsing, an ATS score, and career recommendations.</p>
+                    </div>
+
+                    <form action="{{ url_for('analyze') }}" method="POST" enctype="multipart/form-data" class="upload-form" id="resume-upload-form">
+                        <div class="file-dropzone" id="dropzone">
+                            <input 
+                                type="file" 
+                                id="resume" 
+                                name="resume" 
+                                accept=".pdf, .docx, application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document" 
+                                class="file-input"
+                                required
+                                onchange="updateFileName(this)"
+                            >
+                            <div class="dropzone-content">
+                                <div class="upload-icon-circle">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                </div>
+                                <div class="dropzone-text">
+                                    <span class="primary-text" id="file-label">Click to browse or drag and drop your file</span>
+                                    <span class="secondary-text">Supported formats: <strong>.PDF</strong>, <strong>.DOCX</strong> (Max 16MB)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="upload-actions">
+                            <button type="submit" class="btn-analyze" id="btn-analyze-resume">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                </svg>
+                                <span>Analyze Resume Now</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Analysis Results Section -->
+            {% if analysis %}
+            <section class="results-section" id="results-container">
+                <!-- Overview & Score Banner -->
+                <div class="score-grid">
+                    <!-- Score Meter Card -->
+                    <div class="card score-card" id="score-meter-card">
+                        <div class="card-label">Overall Resume Score</div>
+                        <div class="score-display">
+                            <div class="score-circle 
+                                {% if analysis.score >= 80 %}score-high
+                                {% elif analysis.score >= 60 %}score-medium
+                                {% else %}score-low{% endif %}">
+                                <span class="score-number">{{ analysis.score }}</span>
+                                <span class="score-max">/ 100</span>
+                            </div>
+                            <div class="score-status">
+                                <h3>
+                                    {% if analysis.score >= 80 %}
+                                        Strong ATS Match
+                                    {% elif analysis.score >= 60 %}
+                                        Good Foundation
+                                    {% else %}
+                                        Needs Optimization
+                                    {% endif %}
+                                </h3>
+                                <p>
+                                    {% if analysis.score >= 80 %}
+                                        Your resume demonstrates comprehensive skill depth, strong quantifiable results, and clear standard sections.
+                                    {% elif analysis.score >= 60 %}
+                                        Solid baseline profile with good technical indicators. Adding more metrics and missing sections will boost your score.
+                                    {% else %}
+                                        We detected several opportunities to enhance your resume with action verbs, clearer sections, and measurable impact.
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Document Statistics Card -->
+                    <div class="card stats-card" id="document-stats-card">
+                        <div class="card-label">Document Overview</div>
+                        <div class="stats-list">
+                            <div class="stat-row">
+                                <span class="stat-name">Uploaded File:</span>
+                                <span class="stat-val font-mono">{{ analysis.filename }}</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-name">Word Count:</span>
+                                <span class="stat-val">{{ analysis.word_count }} words</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-name">Detected Skills:</span>
+                                <span class="stat-val highlight-val">{{ analysis.total_skills_count }} skills</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-name">Contact Info:</span>
+                                <span class="stat-val">
+                                    {% if analysis.has_email %}Email ✓{% endif %}
+                                    {% if analysis.has_phone %} &bull; Phone ✓{% endif %}
+                                </span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-name">Analyzed:</span>
+                                <span class="stat-val">{{ analysis.analyzed_at }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Skills Breakdown -->
+                <div class="card mb-6" id="skills-breakdown-card">
+                    <div class="card-header">
+                        <h2>Detected Skills & Competencies</h2>
+                        <span class="badge badge-primary">{{ analysis.total_skills_count }} Total Skills Found</span>
+                    </div>
+
+                    {% if analysis.detected_skills_by_cat %}
+                        <div class="skills-category-grid">
+                            {% for category, skills in analysis.detected_skills_by_cat.items() %}
+                                <div class="skill-group">
+                                    <h4 class="skill-category-title">{{ category }}</h4>
+                                    <div class="skills-pill-wrap">
+                                        {% for skill in skills %}
+                                            <span class="skill-pill">{{ skill }}</span>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="empty-notice">No recognizable technical keywords were detected. Try including explicit mentions of your programming languages, tools, and platforms.</p>
+                    {% endif %}
+                </div>
+
+                <!-- Strengths and Suggestions Dual Column -->
+                <div class="insights-grid mb-6">
+                    <!-- Strengths Card -->
+                    <div class="card" id="strengths-card">
+                        <div class="card-header border-b">
+                            <div class="icon-title">
+                                <span class="icon-box green">✓</span>
+                                <h2>Key Strengths</h2>
+                            </div>
+                        </div>
+                        <ul class="insight-list">
+                            {% for strength in analysis.strengths %}
+                                <li class="insight-item strength-item">
+                                    <span class="check-icon">✓</span>
+                                    <span>{{ strength }}</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <!-- Improvement Suggestions Card -->
+                    <div class="card" id="suggestions-card">
+                        <div class="card-header border-b">
+                            <div class="icon-title">
+                                <span class="icon-box amber">💡</span>
+                                <h2>Recommendations for Improvement</h2>
+                            </div>
+                        </div>
+                        <ul class="insight-list">
+                            {% for suggestion in analysis.suggestions %}
+                                <li class="insight-item suggestion-item">
+                                    <span class="tip-icon">→</span>
+                                    <span>{{ suggestion }}</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Career Opportunities & Job Matches -->
+                <div class="card mb-6" id="career-matches-card">
+                    <div class="card-header">
+                        <h2>Recommended Career Opportunities</h2>
+                        <p class="card-subtitle">Job profiles matched against your parsed skill set and experience profile.</p>
+                    </div>
+
+                    <div class="job-matches-grid">
+                        {% for job in analysis.job_matches %}
+                            <div class="job-card">
+                                <div class="job-header">
+                                    <h3 class="job-title">{{ job.title }}</h3>
+                                    <div class="job-pct-badge 
+                                        {% if job.match_percentage >= 75 %}badge-high
+                                        {% elif job.match_percentage >= 50 %}badge-med
+                                        {% else %}badge-low{% endif %}">
+                                        {{ job.match_percentage }}% Match
+                                    </div>
+                                </div>
+                                <p class="job-desc">{{ job.description }}</p>
+
+                                {% if job.matching_skills %}
+                                    <div class="job-skills-section">
+                                        <span class="job-skills-label">Your Matching Skills:</span>
+                                        <div class="skills-pill-wrap">
+                                            {% for skill in job.matching_skills %}
+                                                <span class="skill-pill pill-match">{{ skill }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                {% endif %}
+
+                                {% if job.recommended_skills %}
+                                    <div class="job-skills-section mt-2">
+                                        <span class="job-skills-label text-muted">Recommended to Learn:</span>
+                                        <div class="skills-pill-wrap">
+                                            {% for skill in job.recommended_skills %}
+                                                <span class="skill-pill pill-recommend">{{ skill }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Document Text Snippet Preview -->
+                {% if analysis.text_preview %}
+                <div class="card" id="text-preview-card">
+                    <div class="card-header border-b">
+                        <h2>Parsed Document Text (Snippet)</h2>
+                    </div>
+                    <div class="text-preview-box">
+                        <pre>{{ analysis.text_preview }}</pre>
+                    </div>
+                </div>
+                {% endif %}
+            </section>
+            {% endif %}
+        </div>
+    </main>
+
+    <script>
+        function updateFileName(input) {
+            const label = document.getElementById('file-label');
+            if (input.files && input.files[0]) {
+                const fileName = input.files[0].name;
+                const fileSize = (input.files[0].size / 1024).toFixed(1);
+                label.innerHTML = `<strong>Selected:</strong> ${fileName} (${fileSize} KB)`;
+            } else {
+                label.textContent = "Click to browse or drag and drop your file";
+            }
+        }
+    </script>
+</body>
+</html>
