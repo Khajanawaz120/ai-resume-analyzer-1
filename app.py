@@ -12,7 +12,9 @@ Features:
 
 import os
 import re
+import secrets
 import sqlite3
+import tempfile
 from functools import wraps
 from datetime import datetime
 from werkzeug.utils import secure_filename
@@ -46,12 +48,14 @@ except ImportError:
     HAS_DOCX = False
 
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='public', static_url_path='')
 
 # Security & configuration
-app.secret_key = os.environ.get(
-    "FLASK_SECRET_KEY",
-    "dev-insecure-flask-secret-key-change-in-production-resume-analyzer-2026"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=os.environ.get('VERCEL') == '1',
 )
 
 # Upload configuration
@@ -61,8 +65,10 @@ MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB max upload size
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 # Database path
-# Vercel's deployment filesystem is read-only, so use /tmp for SQLite.
-DATABASE = os.path.join('/tmp', 'users.db')
+# Vercel's deployment filesystem is read-only, so SQLite must use the runtime
+# temp directory. Vercel instances are ephemeral; use a managed database for
+# production persistence.
+DATABASE = os.path.join(tempfile.gettempdir(), 'ai_resume_analyzer_users.db')
 
 
 def get_db():
@@ -544,7 +550,8 @@ def signup():
             flash("Account created successfully! Please log in with your credentials.", "success")
             return redirect(url_for('login'))
         except sqlite3.IntegrityError:
-            flash("An error occurred while creating your account. Please try again.", "error")
+            db.rollback()
+            flash("An account with this email already exists. Please log in.", "error")
             return render_template('signup.html', name=name, email=email)
 
     return render_template('signup.html')
@@ -630,7 +637,7 @@ def request_entity_too_large(error):
 
 @app.errorhandler(404)
 def page_not_found(error):
-    return redirect(url_for('index'))
+    return "Page not found", 404
 
 
 if __name__ == '__main__':

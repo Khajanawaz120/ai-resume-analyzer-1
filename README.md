@@ -53,9 +53,9 @@ A secure, production-ready AI Resume Analyzer built with Flask, SQLite, `pypdf`,
 │   ├── signin.html         # Front page Log In interface
 │   ├── signup.html         # User registration page
 │   └── dashboard.html      # Protected dashboard, analysis view & Log Out
-├── static/
+├── public/
 │   └── style.css           # Stylish black & red responsive UI stylesheet
-└── uploads/                # Local temporary storage for resume processing
+└── uploads/                # Not used by the app; uploads are processed in memory
 ```
 
 ---
@@ -143,7 +143,9 @@ http://127.0.0.1:5000
 
 ## Deployment & Database Notice (Vercel / Cloud Hosting)
 
-- **Local Development**: Uses local SQLite (`users.db`) and local upload buffering.
+- **Local Development**: Uses SQLite in the operating system temp directory and processes uploads in memory.
 - **Serverless Hosting (e.g., Vercel)**:
-  - Serverless functions are stateless and ephemeral. Files written to local disk (`users.db` or `uploads/`) will be recycled when containers spin down.
+   - Static assets are served from `public/` and `/style.css` is publicly accessible.
+   - Serverless functions are stateless and ephemeral. The runtime SQLite database is stored in `/tmp` on Vercel and may be recycled when containers spin down.
   - For long-term production hosting on Vercel, connect an external managed database (such as **Supabase PostgreSQL**, **Neon**, or **PlanetScale**) using an environment variable like `DATABASE_URL`, and use cloud object storage (such as **AWS S3**, **Cloudflare R2**, or **Google Cloud Storage**) for uploaded files.
+   - Set `FLASK_SECRET_KEY` to a strong secret in Vercel environment variables. The development fallback is generated per process and is not suitable for persistent production sessions.
