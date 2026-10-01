@@ -81,6 +81,7 @@ MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB max upload size
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 LEGACY_SQLITE_DB_PATH = os.path.join(os.getcwd(), 'users.db')
+_database_initialized = False
 
 
 def get_database_url():
@@ -163,9 +164,15 @@ def normalize_email(email):
 
 def get_db():
     """Returns a database connection configured for SQLite or PostgreSQL."""
+    global _database_initialized
+
     db = getattr(g, '_database', None)
     if db is not None:
         return db
+
+    if not _database_initialized:
+        init_db()
+        _database_initialized = True
 
     database_url = get_database_url()
     if is_postgres_database(database_url):
@@ -241,8 +248,9 @@ def init_db():
         conn.commit()
 
 
-# Ensure database is initialized on startup
-init_db()
+if os.environ.get('VERCEL') != '1':
+    init_db()
+    _database_initialized = True
 
 
 def allowed_file(filename):
