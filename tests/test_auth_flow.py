@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 import app as app_module
 
@@ -10,6 +11,17 @@ def test_database_url_config_and_session_secret_are_environment_driven():
 
     assert app_module.get_database_url() == 'sqlite:///./test_auth.db'
     assert app_module.app.secret_key == 'persistent-secret-key'
+
+
+def test_vercel_uses_writable_temporary_sqlite_fallback(monkeypatch):
+    monkeypatch.delenv('DATABASE_URL', raising=False)
+    monkeypatch.delenv('POSTGRES_URL', raising=False)
+    monkeypatch.setenv('VERCEL', '1')
+
+    database_url = app_module.get_database_url()
+
+    assert database_url == 'sqlite:////tmp/ai_resume_analyzer_users.db'
+    assert os.path.dirname(app_module.get_sqlite_path(database_url)) == tempfile.gettempdir()
 
 
 def test_sign_up_and_login_work_with_secure_hashing_and_unique_email():

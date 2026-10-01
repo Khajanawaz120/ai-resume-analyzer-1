@@ -13,6 +13,7 @@ Features:
 import os
 import re
 import sqlite3
+import tempfile
 from functools import wraps
 from datetime import datetime
 from urllib.parse import urlparse
@@ -83,8 +84,13 @@ LEGACY_SQLITE_DB_PATH = os.path.join(os.getcwd(), 'users.db')
 
 
 def get_database_url():
-    """Return the configured database URL or a local SQLite fallback for development."""
-    return os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL') or 'sqlite:///./users.db'
+    """Return the configured database URL or a writable SQLite fallback."""
+    database_url = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL')
+    if database_url:
+        return database_url
+    if os.environ.get('VERCEL') == '1':
+        return 'sqlite:////tmp/ai_resume_analyzer_users.db'
+    return 'sqlite:///./users.db'
 
 
 def is_postgres_database(database_url):
@@ -99,6 +105,8 @@ def get_sqlite_path(database_url):
         raise ValueError(f'Unsupported SQLite URL: {database_url}')
 
     db_path = parsed.path
+    if database_url == 'sqlite:////tmp/ai_resume_analyzer_users.db':
+        return os.path.join(tempfile.gettempdir(), 'ai_resume_analyzer_users.db')
     if not db_path:
         return os.path.join(os.getcwd(), 'users.db')
 
