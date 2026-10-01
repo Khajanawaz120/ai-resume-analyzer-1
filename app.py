@@ -12,11 +12,11 @@ Features:
 
 import os
 import re
-import secrets
 import sqlite3
-import tempfile
 from functools import wraps
 from datetime import datetime
+from urllib.parse import urlparse
+
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import (
@@ -27,8 +27,18 @@ from flask import (
     url_for,
     session,
     flash,
-    g
+    g,
+    send_from_directory
 )
+
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+    HAS_PG = True
+except ImportError:
+    psycopg = None
+    dict_row = None
+    HAS_PG = False
 
 # Optional PDF & DOCX libraries with clean fallbacks
 try:
@@ -50,13 +60,18 @@ except ImportError:
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
-# Security & configuration
-app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=os.environ.get('VERCEL') == '1',
-)
+
+def refresh_app_security_config():
+    """Re-read environment-backed security settings so runtime config stays stable across restarts."""
+    secret_key = os.environ.get('FLASK_SECRET_KEY') or 'dev-secret-key-change-me'
+    app.config['SECRET_KEY'] = secret_key
+    app.secret_key = secret_key
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_SECURE'] = os.environ.get('VERCEL') == '1' or os.environ.get('FLASK_ENV') == 'production'
+
+
+refresh_app_security_config()
 
 # Upload configuration
 ALLOWED_EXTENSIONS = {'pdf', 'docx'}
@@ -64,20 +79,112 @@ MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB max upload size
 
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
-# Database path
-# Vercel's deployment filesystem is read-only, so SQLite must use the runtime
-# temp directory. Vercel instances are ephemeral; use a managed database for
-# production persistence.
-DATABASE = os.path.join(tempfile.gettempdir(), 'ai_resume_analyzer_users.db')
+LEGACY_SQLITE_DB_PATH = os.path.join(os.getcwd(), 'users.db')
+
+
+def get_database_url():
+    """Return the configured database URL or a local SQLite fallback for development."""
+    return os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL') or 'sqlite:///./users.db'
+
+
+def is_postgres_database(database_url):
+    """Return True when the configured database is PostgreSQL-compatible."""
+    return bool(database_url) and database_url.startswith(('postgresql://', 'postgres://', 'postgresql+psycopg://', 'postgresql+psycopg2://'))
+
+
+def get_sqlite_path(database_url):
+    """Convert a sqlite database URL into a filesystem path."""
+    parsed = urlparse(database_url)
+    if parsed.scheme != 'sqlite':
+        raise ValueError(f'Unsupported SQLite URL: {database_url}')
+
+    db_path = parsed.path
+    if not db_path:
+        return os.path.join(os.getcwd(), 'users.db')
+
+    if db_path.startswith('/'):
+        candidate = db_path[1:] if db_path.startswith('/') and not db_path.startswith('//') else db_path
+        if os.path.isabs(candidate):
+            return candidate
+        return os.path.join(os.getcwd(), candidate)
+
+    if db_path.startswith('./'):
+        return os.path.join(os.getcwd(), db_path[2:])
+    return os.path.join(os.getcwd(), db_path)
+
+
+def migrate_legacy_sqlite_users():
+    """Copy users from the old local SQLite database into the configured persistent database if needed."""
+    if not is_postgres_database(get_database_url()):
+        return
+
+    if not os.path.exists(LEGACY_SQLITE_DB_PATH):
+        return
+
+    try:
+        with sqlite3.connect(LEGACY_SQLITE_DB_PATH) as legacy_conn:
+            legacy_conn.row_factory = sqlite3.Row
+            legacy_users = legacy_conn.execute(
+                'SELECT id, name, email, password_hash, created_at FROM users ORDER BY id'
+            ).fetchall()
+    except sqlite3.DatabaseError:
+        return
+
+    if not legacy_users:
+        return
+
+    with psycopg.connect(get_database_url()) as conn:
+        with conn.cursor() as cursor:
+            for row in legacy_users:
+                cursor.execute(
+                    'SELECT id FROM users WHERE LOWER(email) = LOWER(%s)',
+                    (row['email'],)
+                )
+                if cursor.fetchone() is not None:
+                    continue
+                cursor.execute(
+                    'INSERT INTO users (name, email, password_hash, created_at) VALUES (%s, %s, %s, %s) ON CONFLICT (LOWER(email)) DO NOTHING',
+                    (row['name'], row['email'], row['password_hash'], row['created_at'])
+                )
+
+
+def normalize_email(email):
+    """Normalize a submitted email for consistent matching and duplicate prevention."""
+    return (email or '').strip().lower()
 
 
 def get_db():
-    """Returns a connection to the SQLite database with Row factory."""
+    """Returns a database connection configured for SQLite or PostgreSQL."""
     db = getattr(g, '_database', None)
-    if db is None:
-        db = g._database = sqlite3.connect(DATABASE)
-        db.row_factory = sqlite3.Row
+    if db is not None:
+        return db
+
+    database_url = get_database_url()
+    if is_postgres_database(database_url):
+        if not HAS_PG:
+            raise RuntimeError('psycopg is required to connect to PostgreSQL databases.')
+        db = psycopg.connect(database_url, autocommit=False)
+        db.cursor_factory = None
+        db.row_factory = None
+        try:
+            db.execute('SELECT 1')
+        except Exception:
+            db.close()
+            raise
+        g._database = db
+        return db
+
+    sqlite_path = get_sqlite_path(database_url)
+    os.makedirs(os.path.dirname(sqlite_path) or '.', exist_ok=True)
+    db = sqlite3.connect(sqlite_path)
+    db.row_factory = sqlite3.Row
+    g._database = db
     return db
+
+
+@app.before_request
+def ensure_runtime_security_config():
+    refresh_app_security_config()
 
 
 @app.teardown_appcontext
@@ -89,20 +196,41 @@ def close_connection(exception):
 
 
 def init_db():
-    """Initializes the database schema if tables do not exist."""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
-    conn.commit()
-    conn.close()
+    """Create the users table without removing any existing data."""
+    database_url = get_database_url()
+    if is_postgres_database(database_url):
+        if not HAS_PG:
+            raise RuntimeError('psycopg is required to connect to PostgreSQL databases.')
+        with psycopg.connect(database_url) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        password_hash TEXT NOT NULL,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """)
+                cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));')
+                conn.commit()
+        migrate_legacy_sqlite_users()
+        return
+
+    sqlite_path = get_sqlite_path(database_url)
+    os.makedirs(os.path.dirname(sqlite_path) or '.', exist_ok=True)
+    with sqlite3.connect(sqlite_path) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));')
+        conn.commit()
 
 
 # Ensure database is initialized on startup
@@ -450,20 +578,26 @@ def index():
     return redirect(url_for('login'))
 
 
+@app.route('/style.css')
+def serve_style_css():
+    """Serve the shared public stylesheet without authentication or redirects."""
+    return send_from_directory(app.static_folder, 'style.css', mimetype='text/css')
+
+
 @app.route('/login', methods=['GET', 'POST'])
 @app.route('/signin', methods=['GET', 'POST'])
 def login():
     """
     Login page:
     - Rejects random email/password
-    - Validates against SQLite user records with hashed passwords
-    - Sets secure session
+    - Validates against the configured persistent database with hashed passwords
+    - Sets a secure session
     """
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
-        email = request.form.get('email', '').strip().lower()
+        email = normalize_email(request.form.get('email', ''))
         password = request.form.get('password', '').strip()
 
         if not email or not password:
@@ -472,15 +606,17 @@ def login():
 
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+        if is_postgres_database(get_database_url()):
+            cursor.execute('SELECT * FROM users WHERE LOWER(email) = LOWER(%s)', (email,))
+        else:
+            cursor.execute('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', (email,))
         user = cursor.fetchone()
 
-        # Secure check: Verify user exists AND password hash matches
         if user is None or not check_password_hash(user['password_hash'], password):
             flash("Invalid email or password.", "error")
             return render_template('signin.html', email=email)
 
-        # Successful login: Set session
+        session.clear()
         session['user_id'] = user['id']
         session['user_email'] = user['email']
         session['user_name'] = user['name']
@@ -497,7 +633,7 @@ def signup():
     - Validates inputs (name, email, password, confirm_password)
     - Rejects existing emails
     - Securely hashes passwords with Werkzeug
-    - Persists to SQLite
+    - Persists to the configured persistent database
     - Redirects to login on success
     """
     if 'user_id' in session:
@@ -505,16 +641,14 @@ def signup():
 
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
-        email = request.form.get('email', '').strip().lower()
+        email = normalize_email(request.form.get('email', ''))
         password = request.form.get('password', '').strip()
         confirm_password = request.form.get('confirm_password', '').strip()
 
-        # Validation
         if not name or not email or not password or not confirm_password:
             flash("All fields are required. Please fill out the full form.", "error")
             return render_template('signup.html', name=name, email=email)
 
-        # Email format check
         email_regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
         if not re.match(email_regex, email):
             flash("Please enter a valid email address.", "error")
@@ -531,25 +665,32 @@ def signup():
         db = get_db()
         cursor = db.cursor()
 
-        # Check if email is already registered
-        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        if is_postgres_database(get_database_url()):
+            cursor.execute('SELECT id FROM users WHERE LOWER(email) = LOWER(%s)', (email,))
+        else:
+            cursor.execute('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', (email,))
         existing_user = cursor.fetchone()
         if existing_user is not None:
             flash("An account with this email already exists. Please log in.", "error")
             return render_template('signup.html', name=name, email=email)
 
-        # Hash password securely
         password_hash = generate_password_hash(password, method='pbkdf2:sha256')
 
         try:
-            cursor.execute(
-                "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-                (name, email, password_hash)
-            )
+            if is_postgres_database(get_database_url()):
+                cursor.execute(
+                    'INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s)',
+                    (name, email, password_hash)
+                )
+            else:
+                cursor.execute(
+                    'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
+                    (name, email, password_hash)
+                )
             db.commit()
             flash("Account created successfully! Please log in with your credentials.", "success")
             return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
+        except Exception:
             db.rollback()
             flash("An account with this email already exists. Please log in.", "error")
             return render_template('signup.html', name=name, email=email)
