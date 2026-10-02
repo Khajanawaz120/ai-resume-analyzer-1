@@ -47,6 +47,13 @@
                 {% endif %}
             {% endwith %}
 
+            <div class="flash-container" id="login-feedback" role="alert" hidden>
+                <div class="flash-alert flash-error">
+                    <span class="flash-icon" aria-hidden="true">!</span>
+                    <span class="flash-text" id="login-feedback-message"></span>
+                </div>
+            </div>
+
             <form action="{{ url_for('login') }}" method="POST" class="auth-form" id="login-form">
                 <div class="form-group">
                     <label for="email" class="form-label">Email Address</label>
@@ -64,15 +71,23 @@
 
                 <div class="form-group">
                     <label for="password" class="form-label">Password</label>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        name="password" 
-                        class="form-input" 
-                        placeholder="••••••••" 
-                        required 
-                        autocomplete="current-password"
-                    >
+                    <div class="password-input-wrap">
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="form-input"
+                            placeholder="••••••••"
+                            required
+                            autocomplete="current-password"
+                        >
+                        <button type="button" class="password-toggle" data-password-toggle="password" aria-label="Show password" title="Show password">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn-primary" id="btn-login">
@@ -82,6 +97,10 @@
                         <polyline points="12 5 19 12 12 19"></polyline>
                     </svg>
                 </button>
+            </form>
+
+            <form action="{{ url_for('guest_login') }}" method="POST" class="guest-form">
+                <button type="submit" class="btn-guest" id="btn-guest-login">Continue as Guest</button>
             </form>
 
             <div class="auth-footer">
@@ -95,5 +114,50 @@
             </div>
         </div>
     </div>
+    <script>
+        document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const input = document.getElementById(button.dataset.passwordToggle);
+                const showPassword = input.type === 'password';
+                input.type = showPassword ? 'text' : 'password';
+                button.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+                button.title = showPassword ? 'Hide password' : 'Show password';
+            });
+        });
+
+        const loginForm = document.getElementById('login-form');
+        loginForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const button = document.getElementById('btn-login');
+            const feedback = document.getElementById('login-feedback');
+            const feedbackMessage = document.getElementById('login-feedback-message');
+            feedback.hidden = true;
+            button.disabled = true;
+            button.classList.add('is-working');
+            button.querySelector('span').textContent = 'Checking your account...';
+
+            try {
+                const response = await fetch(loginForm.action, {
+                    method: 'POST',
+                    body: new FormData(loginForm),
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const result = await response.json();
+
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || 'Unable to log in. Please try again.');
+                }
+
+                window.location.assign(result.redirect);
+            } catch (error) {
+                feedbackMessage.textContent = error.message;
+                feedback.hidden = false;
+                button.disabled = false;
+                button.classList.remove('is-working');
+                button.querySelector('span').textContent = 'Log In';
+            }
+        });
+    </script>
 </body>
 </html>

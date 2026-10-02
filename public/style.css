@@ -84,6 +84,51 @@ body {
     padding-right: 1.25rem;
 }
 
+@keyframes rise-in {
+    from {
+        opacity: 0;
+        transform: translateY(18px) scale(0.99);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes slide-down {
+    from {
+        opacity: 0;
+        transform: translateY(-12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes upload-bounce {
+    to {
+        transform: translateY(-6px) scale(1.04);
+    }
+}
+
+@keyframes file-ready {
+    50% {
+        transform: scale(1.12) rotate(-5deg);
+    }
+}
+
+@keyframes icon-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes score-arrive {
+    from { opacity: 0; transform: scale(0.78); }
+    to { opacity: 1; transform: scale(1); }
+}
+
 /* ==========================================================================
    Alerts & Flash Messages
    ========================================================================== */
@@ -95,6 +140,10 @@ body {
     margin-bottom: 1.5rem;
 }
 
+.flash-container[hidden] {
+    display: none !important;
+}
+
 .flash-alert {
     display: flex;
     align-items: center;
@@ -103,6 +152,7 @@ body {
     border-radius: var(--radius-md);
     font-size: 0.9375rem;
     font-weight: 500;
+    animation: rise-in 0.4s ease-out both;
 }
 
 .flash-alert.flash-error {
@@ -160,6 +210,7 @@ body {
     backdrop-filter: blur(12px);
     position: relative;
     overflow: hidden;
+    animation: rise-in 0.7s cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
 .auth-card::before {
@@ -172,9 +223,15 @@ body {
     background: linear-gradient(90deg, transparent, #ef4444, #dc2626, transparent);
 }
 
+#btn-login:disabled {
+    cursor: progress;
+    opacity: 0.8;
+}
+
 .auth-header {
     text-align: center;
     margin-bottom: 2rem;
+    animation: rise-in 0.55s 0.1s ease-out both;
 }
 
 .brand-badge {
@@ -215,6 +272,16 @@ body {
     gap: 1.25rem;
 }
 
+.auth-form > * {
+    animation: rise-in 0.45s ease-out both;
+}
+
+.auth-form > :nth-child(1) { animation-delay: 0.16s; }
+.auth-form > :nth-child(2) { animation-delay: 0.22s; }
+.auth-form > :nth-child(3) { animation-delay: 0.28s; }
+.auth-form > :nth-child(4) { animation-delay: 0.34s; }
+.auth-form > :nth-child(5) { animation-delay: 0.4s; }
+
 .form-group {
     display: flex;
     flex-direction: column;
@@ -237,6 +304,43 @@ body {
     color: #ffffff;
     background-color: var(--bg-input);
     transition: all 0.2s ease-in-out;
+}
+
+.password-input-wrap {
+    position: relative;
+}
+
+.password-input-wrap .form-input {
+    padding-right: 3.25rem;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 0.75rem;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    color: var(--text-muted);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transform: translateY(-50%);
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+    color: #ffffff;
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+}
+
+.password-toggle svg {
+    width: 1.125rem;
+    height: 1.125rem;
 }
 
 .form-input:focus {
@@ -279,6 +383,31 @@ body {
 .btn-primary:active {
     transform: translateY(0);
     box-shadow: 0 2px 10px rgba(239, 68, 68, 0.4);
+}
+
+.guest-form {
+    margin-top: 0.75rem;
+    animation: rise-in 0.45s 0.44s ease-out both;
+}
+
+.btn-guest {
+    width: 100%;
+    padding: 0.75rem 1.25rem;
+    color: #fca5a5;
+    background: transparent;
+    border: 1px solid var(--primary-border);
+    border-radius: var(--radius-md);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-guest:hover,
+.btn-guest:focus-visible {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    outline: none;
 }
 
 .auth-footer {
@@ -333,6 +462,7 @@ body {
     z-index: 40;
     backdrop-filter: blur(12px);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.75);
+    animation: slide-down 0.55s ease-out both;
 }
 
 .navbar-container {
@@ -502,6 +632,7 @@ body {
 .dashboard-main {
     padding-top: 2rem;
     padding-bottom: 5rem;
+    animation: rise-in 0.6s 0.08s ease-out both;
 }
 
 .card {
@@ -568,6 +699,7 @@ body {
     padding: 2.25rem;
     border: 1px solid var(--border-red);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 25px rgba(239, 68, 68, 0.12);
+    animation: rise-in 0.65s 0.16s cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
 .upload-header {
@@ -602,6 +734,21 @@ body {
     border-color: #ef4444;
     background-color: rgba(239, 68, 68, 0.08);
     box-shadow: 0 0 25px rgba(239, 68, 68, 0.2) inset;
+}
+
+.file-dropzone.is-dragging {
+    transform: scale(1.01);
+    border-color: #f87171;
+    background-color: rgba(239, 68, 68, 0.12);
+    box-shadow: 0 0 28px rgba(239, 68, 68, 0.22) inset, 0 0 18px rgba(239, 68, 68, 0.12);
+}
+
+.file-dropzone.is-dragging .upload-icon-circle {
+    animation: upload-bounce 0.42s ease-in-out infinite alternate;
+}
+
+.file-dropzone.has-file .upload-icon-circle {
+    animation: file-ready 0.5s ease-out;
 }
 
 .file-input {
@@ -645,6 +792,7 @@ body {
     font-size: 1.0625rem;
     font-weight: 700;
     color: #ffffff;
+    overflow-wrap: anywhere;
 }
 
 .secondary-text {
@@ -680,6 +828,19 @@ body {
     transform: translateY(-1px);
 }
 
+.btn-analyze:disabled {
+    cursor: progress;
+    opacity: 0.9;
+}
+
+.btn-analyze.is-working svg {
+    animation: icon-spin 1s linear infinite;
+}
+
+.results-section .card {
+    animation: rise-in 0.55s ease-out both;
+}
+
 /* ==========================================================================
    Results: Score Meter & Document Stats
    ========================================================================== */
@@ -707,6 +868,7 @@ body {
     justify-content: center;
     flex-shrink: 0;
     border: 4px solid currentColor;
+    animation: score-arrive 0.7s 0.2s ease-out both;
 }
 
 .score-high {
@@ -1053,4 +1215,17 @@ body {
         width: 100%;
         justify-content: center;
     }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+
 }

@@ -149,7 +149,7 @@
                                 {% if analysis.score >= 80 %}score-high
                                 {% elif analysis.score >= 60 %}score-medium
                                 {% else %}score-low{% endif %}">
-                                <span class="score-number">{{ analysis.score }}</span>
+                                <span class="score-number" data-score="{{ analysis.score }}">{{ analysis.score }}</span>
                                 <span class="score-max">/ 100</span>
                             </div>
                             <div class="score-status">
@@ -334,16 +334,73 @@
     </main>
 
     <script>
+        const scoreNumber = document.querySelector('.score-number[data-score]');
+        if (scoreNumber) {
+            const finalScore = Number(scoreNumber.dataset.score);
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                scoreNumber.textContent = String(finalScore);
+            } else {
+                let animationStartedAt;
+                const animateScore = (timestamp) => {
+                    if (animationStartedAt === undefined) animationStartedAt = timestamp;
+                    const progress = Math.min((timestamp - animationStartedAt) / 900, 1);
+                    const easedProgress = 1 - Math.pow(1 - progress, 3);
+                    scoreNumber.textContent = String(Math.round(finalScore * easedProgress));
+                    if (progress < 1) requestAnimationFrame(animateScore);
+                };
+                scoreNumber.textContent = '0';
+                requestAnimationFrame(animateScore);
+            }
+        }
+
         function updateFileName(input) {
             const label = document.getElementById('file-label');
+            const dropzone = document.getElementById('dropzone');
             if (input.files && input.files[0]) {
                 const fileName = input.files[0].name;
                 const fileSize = (input.files[0].size / 1024).toFixed(1);
-                label.innerHTML = `<strong>Selected:</strong> ${fileName} (${fileSize} KB)`;
+                label.textContent = `Selected: ${fileName} (${fileSize} KB)`;
+                dropzone.classList.add('has-file');
             } else {
                 label.textContent = "Click to browse or drag and drop your file";
+                dropzone.classList.remove('has-file');
             }
         }
+
+        const dropzone = document.getElementById('dropzone');
+        const resumeInput = document.getElementById('resume');
+        let dragDepth = 0;
+
+        dropzone.addEventListener('dragenter', (event) => {
+            event.preventDefault();
+            dragDepth += 1;
+            dropzone.classList.add('is-dragging');
+        });
+
+        dropzone.addEventListener('dragover', (event) => event.preventDefault());
+
+        dropzone.addEventListener('dragleave', (event) => {
+            event.preventDefault();
+            dragDepth = Math.max(0, dragDepth - 1);
+            if (dragDepth === 0) dropzone.classList.remove('is-dragging');
+        });
+
+        dropzone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            dragDepth = 0;
+            dropzone.classList.remove('is-dragging');
+            if (event.dataTransfer.files.length) {
+                resumeInput.files = event.dataTransfer.files;
+                updateFileName(resumeInput);
+            }
+        });
+
+        document.getElementById('resume-upload-form').addEventListener('submit', () => {
+            const analyzeButton = document.getElementById('btn-analyze-resume');
+            analyzeButton.disabled = true;
+            analyzeButton.classList.add('is-working');
+            analyzeButton.querySelector('span').textContent = 'Analyzing resume...';
+        });
     </script>
 </body>
 </html>

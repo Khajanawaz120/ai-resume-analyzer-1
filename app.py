@@ -29,7 +29,8 @@ from flask import (
     session,
     flash,
     g,
-    send_from_directory
+    send_from_directory,
+    jsonify
 )
 
 try:
@@ -85,12 +86,14 @@ _database_initialized = False
 
 
 def get_database_url():
-    """Return the configured database URL or a writable SQLite fallback."""
+    """Return the configured database URL or a local SQLite fallback."""
     database_url = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL')
     if database_url:
+        if os.environ.get('VERCEL') == '1' and not is_postgres_database(database_url):
+            raise RuntimeError('Set DATABASE_URL to a persistent PostgreSQL database in Vercel project settings to save accounts.')
         return database_url
     if os.environ.get('VERCEL') == '1':
-        return 'sqlite:////tmp/ai_resume_analyzer_users.db'
+        raise RuntimeError('Account storage is not configured. Set DATABASE_URL to a persistent PostgreSQL database in Vercel project settings.')
     return 'sqlite:///./users.db'
 
 
@@ -262,7 +265,7 @@ def login_required(f):
     """Decorator to require authenticated session for protected routes."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
+        if 'user_id' not in session and not session.get('guest'):
             flash("Please log in to access your dashboard.", "error")
             return redirect(url_for('login'))
         return f(*args, **kwargs)
@@ -589,7 +592,7 @@ def analyze_resume_text(raw_text, filename=""):
 @app.route('/')
 def index():
     """First/front page route: redirects to dashboard if authenticated, else login."""
-    if 'user_id' in session:
+    if 'user_id' in session or session.get('guest'):
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
@@ -609,18 +612,30 @@ def login():
     - Validates against the configured persistent database with hashed passwords
     - Sets a secure session
     """
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if 'user_id' in session:
+        if is_ajax:
+            return jsonify(success=True, redirect=url_for('dashboard'), name=session.get('user_name', 'User'))
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
         email = normalize_email(request.form.get('email', ''))
         password = request.form.get('password', '').strip()
 
-        if not email or not password:
-            flash("Please enter both email and password.", "error")
+        def login_error(message, status_code=400):
+            if is_ajax:
+                return jsonify(success=False, message=message), status_code
+            flash(message, "error")
             return render_template('signin.html', email=email)
 
-        db = get_db()
+        if not email or not password:
+            return login_error("Please enter both email and password.")
+
+        try:
+            db = get_db()
+        except RuntimeError as error:
+            return login_error(str(error), 503)
         cursor = db.cursor()
         if is_postgres_database(get_database_url()):
             cursor.execute('SELECT * FROM users WHERE LOWER(email) = LOWER(%s)', (email,))
@@ -629,14 +644,15 @@ def login():
         user = cursor.fetchone()
 
         if user is None or not check_password_hash(user['password_hash'], password):
-            flash("Invalid email or password.", "error")
-            return render_template('signin.html', email=email)
+            return login_error("Invalid email or password.", 401)
 
         session.clear()
         session['user_id'] = user['id']
         session['user_email'] = user['email']
         session['user_name'] = user['name']
         flash(f"Welcome back, {user['name']}!", "success")
+        if is_ajax:
+            return jsonify(success=True, redirect=url_for('dashboard'), name=user['name'])
         return redirect(url_for('dashboard'))
 
     return render_template('signin.html')
@@ -678,7 +694,11 @@ def signup():
             flash("Passwords do not match. Please verify both password fields.", "error")
             return render_template('signup.html', name=name, email=email)
 
-        db = get_db()
+        try:
+            db = get_db()
+        except RuntimeError as error:
+            flash(str(error), "error")
+            return render_template('signup.html', name=name, email=email)
         cursor = db.cursor()
 
         if is_postgres_database(get_database_url()):
@@ -712,6 +732,17 @@ def signup():
             return render_template('signup.html', name=name, email=email)
 
     return render_template('signup.html')
+
+
+@app.route('/guest-login', methods=['POST'])
+def guest_login():
+    """Start a temporary guest session without creating an account."""
+    session.clear()
+    session['guest'] = True
+    session['user_name'] = 'Guest'
+    session['user_email'] = 'Guest session'
+    flash("You are using a temporary guest session. Your session won't be saved.", "success")
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/dashboard')

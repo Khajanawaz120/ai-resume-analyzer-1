@@ -141,11 +141,13 @@ http://127.0.0.1:5000
 
 ---
 
-## Deployment & Database Notice (Vercel / Cloud Hosting)
+## Vercel Deployment & Persistent Accounts
 
-- **Local Development**: Uses SQLite in the operating system temp directory and processes uploads in memory.
-- **Serverless Hosting (e.g., Vercel)**:
-   - Static assets are served from `public/` and `/style.css` is publicly accessible.
-   - Serverless functions are stateless and ephemeral. The runtime SQLite database is stored in `/tmp` on Vercel and may be recycled when containers spin down.
-  - For long-term production hosting on Vercel, connect an external managed database (such as **Supabase PostgreSQL**, **Neon**, or **PlanetScale**) using an environment variable like `DATABASE_URL`, and use cloud object storage (such as **AWS S3**, **Cloudflare R2**, or **Google Cloud Storage**) for uploaded files.
-   - Set `FLASK_SECRET_KEY` to a strong secret in Vercel environment variables. The development fallback is generated per process and is not suitable for persistent production sessions.
+The included `vercel.json` deploys the Flask app as a Python function and includes its templates and stylesheet. Vercel's filesystem is temporary, so this app refuses to create or search for accounts there unless a persistent PostgreSQL database is configured.
+
+1. Create a PostgreSQL database with a provider such as Neon or Supabase.
+2. In Vercel, add `DATABASE_URL` using the provider's PostgreSQL connection string. Do not use SQLite for a Vercel deployment.
+3. Add `FLASK_SECRET_KEY` with a long, random secret that stays the same across deployments.
+4. Deploy or redeploy the project. Signup and login will use the shared PostgreSQL database across serverless instances.
+
+Locally, the app continues to use `./users.db` unless `DATABASE_URL` is set. Guest sessions do not create accounts and are temporary. Accounts that existed only in a previous Vercel `/tmp` database cannot be recovered from a new deployment; accounts in a local `users.db` can be migrated when that database is available during deployment startup.
