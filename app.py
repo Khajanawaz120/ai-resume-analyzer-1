@@ -181,9 +181,7 @@ def get_db():
     if is_postgres_database(database_url):
         if not HAS_PG:
             raise RuntimeError('psycopg is required to connect to PostgreSQL databases.')
-        db = psycopg.connect(database_url, autocommit=False)
-        db.cursor_factory = None
-        db.row_factory = None
+        db = psycopg.connect(database_url, autocommit=False, row_factory=dict_row)
         try:
             db.execute('SELECT 1')
         except Exception:

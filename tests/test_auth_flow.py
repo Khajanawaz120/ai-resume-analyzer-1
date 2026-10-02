@@ -127,3 +127,30 @@ def test_ajax_login_confirms_credentials_before_starting_success_flow():
 
     with client.session_transaction() as user_session:
         assert user_session['user_name'] == 'Ajax User'
+
+
+def test_postgresql_connections_return_rows_by_column_name(monkeypatch):
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://user:password@localhost/database')
+    monkeypatch.setattr(app_module, '_database_initialized', True)
+    monkeypatch.setattr(app_module, 'HAS_PG', True)
+    connect_options = {}
+
+    class FakeConnection:
+        def execute(self, query):
+            return self
+
+        def close(self):
+            pass
+
+    connection = FakeConnection()
+
+    def fake_connect(database_url, **options):
+        connect_options.update(options)
+        return connection
+
+    monkeypatch.setattr(app_module.psycopg, 'connect', fake_connect)
+
+    with app_module.app.app_context():
+        assert app_module.get_db() is connection
+
+    assert connect_options['row_factory'] is app_module.dict_row
